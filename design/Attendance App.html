@@ -1,0 +1,846 @@
+<!DOCTYPE html><html lang="en"><script src="chrome-extension://eppiocemhmnlbhjplcgkofciiegomcon/libs/extend-native-history-api.js"></script><script src="chrome-extension://eppiocemhmnlbhjplcgkofciiegomcon/libs/requests.js"></script><head>
+
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tracker – Attendance App</title>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script type="text/babel" src="tweaks-panel.jsx" data-plugins="transform-react-jsx-source" data-filename="tweaks-panel.jsx"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  /* Ripple rings */
+  @keyframes ripple-ring {
+    0%   { transform: scale(0.88); opacity: 0.55; }
+    100% { transform: scale(1.55); opacity: 0; }
+  }
+  .ripple-ring {
+    position: absolute;
+    border-radius: 50%;
+    pointer-events: none;
+    animation: ripple-ring 2s ease-out infinite;
+  }
+  .ripple-ring:nth-child(1) { animation-delay: 0s; }
+  .ripple-ring:nth-child(2) { animation-delay: 0.65s; }
+  .ripple-ring:nth-child(3) { animation-delay: 1.3s; }
+
+  /* Click burst */
+  @keyframes burst {
+    0%   { transform: scale(1);   opacity: 0.5; }
+    100% { transform: scale(2.2); opacity: 0; }
+  }
+  .burst-ring {
+    position: absolute;
+    border-radius: 50%;
+    pointer-events: none;
+    animation: burst 0.5s ease-out forwards;
+  }
+
+  body {
+    background: #2d6a4f;
+    background-image: radial-gradient(circle at 30% 20%, #3d8b60 0%, #1b4332 60%, #0d2818 100%);
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    overflow: hidden;
+  }
+  .phone-shell {
+    width: 393px;
+    height: 852px;
+    background: #F4F3EF;
+    border-radius: 54px;
+    box-shadow: 0 0 0 2px #333, 0 0 0 4px #555, 0 30px 80px rgba(0,0,0,0.7), inset 0 0 0 1px rgba(255,255,255,0.15);
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  /* Notch */
+  .phone-notch {
+    position: absolute;
+    top: 0; left: 50%;
+    transform: translateX(-50%);
+    width: 126px; height: 37px;
+    background: #111;
+    border-radius: 0 0 20px 20px;
+    z-index: 100;
+  }
+  /* Side buttons */
+  .phone-shell::before {
+    content: '';
+    position: absolute;
+    left: -4px; top: 120px;
+    width: 4px; height: 36px;
+    background: #444;
+    border-radius: 2px 0 0 2px;
+    box-shadow: 0 50px 0 #444, 0 90px 0 #444;
+  }
+  .phone-shell::after {
+    content: '';
+    position: absolute;
+    right: -4px; top: 160px;
+    width: 4px; height: 70px;
+    background: #444;
+    border-radius: 0 2px 2px 0;
+  }
+  .app-container {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border-radius: 54px;
+  }
+  /* Home indicator */
+  .home-indicator {
+    position: absolute;
+    bottom: 10px; left: 50%;
+    transform: translateX(-50%);
+    width: 134px; height: 5px;
+    background: rgba(0,0,0,0.35);
+    border-radius: 3px;
+    z-index: 100;
+  }
+</style>
+</head>
+<body>
+<div class="phone-shell">
+  <div class="phone-notch"></div>
+  <div class="home-indicator"></div>
+  <div class="app-container" id="root"></div>
+</div>
+
+<script type="text/babel" data-plugins="transform-react-jsx-source" data-filename="inline-1">
+const { useState, useEffect, useRef } = React;
+
+// ── Design tokens ──────────────────────────────────
+const GREEN  = '#1B4D35';
+const GREEN2 = '#2D6A4F';
+const GOLD   = '#C9A55A';
+const BG     = '#F4F3EF';
+const CARD   = '#FFFFFF';
+const TEXT   = '#1A1A1A';
+const MUTED  = '#9B9B9B';
+
+// ── Helpers ────────────────────────────────────────
+function pad(n){ return String(n).padStart(2,'0'); }
+function fmtTime(d){ return `${pad(d.getHours() > 12 ? d.getHours()-12 : d.getHours() || 12)}:${pad(d.getMinutes())} ${d.getHours() >= 12 ? 'PM':'AM'}`; }
+function fmtDateFull(d){ const days=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday']; const months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']; return `${months[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()} · ${days[d.getDay()]}`; }
+
+// Build last 30 days of attendance data
+function buildAttendanceData() {
+  const today = new Date();
+  const data = [];
+  for (let i = 29; i >= 0; i--) {
+    const d = new Date(today);
+    d.setDate(today.getDate() - i);
+    const dow = d.getDay(); // 0=Sun, 6=Sat
+    const isWeekend = dow === 0 || dow === 6;
+    const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    data.push({
+      id: i,
+      date: d,
+      dayNum: d.getDate(),
+      dayName: dayNames[dow],
+      month: monthNames[d.getMonth()],
+      isWeekend,
+      status: isWeekend ? 'weekend' : (i === 0 ? 'present' : 'present'),
+      checkIn:  isWeekend ? null : '09:00 AM',
+      checkOut: isWeekend ? null : (i === 0 ? null : '06:00 PM'),
+      totalHrs: isWeekend ? null : (i === 0 ? null : '09:00'),
+      breakTime: isWeekend ? null : (i === 0 ? null : '01:00'),
+      leaveType: isWeekend ? 'weekend' : null,
+    });
+  }
+  return data;
+}
+
+// ── Icons (inline SVG) ────────────────────────────
+const HomeIcon = ({active}) => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M3 9.5L12 3l9 6.5V20a1 1 0 01-1 1H5a1 1 0 01-1-1V9.5z"/>
+    <path d="M9 21V13h6v8"/>
+  </svg>
+);
+const CalIcon = ({active}) => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="3" y="4" width="18" height="18" rx="3"/>
+    <line x1="16" y1="2" x2="16" y2="6"/>
+    <line x1="8" y1="2" x2="8" y2="6"/>
+    <line x1="3" y1="10" x2="21" y2="10"/>
+    <line x1="8" y1="15" x2="8" y2="15" strokeWidth="2.5"/>
+    <line x1="12" y1="15" x2="12" y2="15" strokeWidth="2.5"/>
+    <line x1="16" y1="15" x2="16" y2="15" strokeWidth="2.5"/>
+  </svg>
+);
+const UserIcon = ({active}) => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="12" cy="8" r="4"/>
+    <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
+  </svg>
+);
+const SettingsIcon = ({active}) => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="12" cy="12" r="3"/>
+    <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
+  </svg>
+);
+
+// ── Clock Icons (matching reference style) ────────
+const CheckInIcon = ({color}) => (
+  <svg width="38" height="38" viewBox="0 0 38 38" fill="none">
+    <circle cx="19" cy="21" r="12" stroke={color} strokeWidth="2.2"/>
+    <line x1="19" y1="21" x2="19" y2="15" stroke={color} strokeWidth="2.2" strokeLinecap="round"/>
+    <line x1="19" y1="21" x2="23" y2="24" stroke={color} strokeWidth="2.2" strokeLinecap="round"/>
+    <path d="M15 7 L19 3 L23 7" stroke={color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+    <path d="M15 10.5 L19 6.5 L23 10.5" stroke={color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+  </svg>
+);
+const CheckOutIcon = ({color}) => (
+  <svg width="38" height="38" viewBox="0 0 38 38" fill="none">
+    <circle cx="19" cy="21" r="12" stroke={color} strokeWidth="2.2"/>
+    <line x1="19" y1="21" x2="19" y2="15" stroke={color} strokeWidth="2.2" strokeLinecap="round"/>
+    <line x1="19" y1="21" x2="23" y2="24" stroke={color} strokeWidth="2.2" strokeLinecap="round"/>
+    <path d="M15 4 L19 8 L23 4" stroke={color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+    <path d="M15 7.5 L19 11.5 L23 7.5" stroke={color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+  </svg>
+);
+const TotalHrsIcon = ({color}) => (
+  <svg width="38" height="38" viewBox="0 0 38 38" fill="none">
+    <circle cx="19" cy="21" r="12" stroke={color} strokeWidth="2.2"/>
+    <line x1="19" y1="21" x2="19" y2="15" stroke={color} strokeWidth="2.2" strokeLinecap="round"/>
+    <line x1="19" y1="21" x2="23" y2="24" stroke={color} strokeWidth="2.2" strokeLinecap="round"/>
+    <path d="M15 7 L19 11 L23 7" stroke={color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+  </svg>
+);
+function StatusBar() {
+  const [time, setTime] = useState(new Date());
+  useEffect(() => { const t = setInterval(() => setTime(new Date()), 1000); return () => clearInterval(t); }, []);
+  return (
+    <div style={{height: 50, paddingTop: 14, display:'flex', alignItems:'center', justifyContent:'space-between', paddingLeft: 24, paddingRight: 20, flexShrink: 0}}>
+      <span style={{fontSize: 15, fontWeight: 700, color: TEXT}}>{pad(time.getHours())}:{pad(time.getMinutes())}</span>
+      <div style={{display:'flex', gap: 5, alignItems:'center'}}>
+        <svg width="17" height="12" viewBox="0 0 17 12"><rect x="0" y="3" width="3" height="9" rx="1" fill={TEXT}/><rect x="4.5" y="2" width="3" height="10" rx="1" fill={TEXT}/><rect x="9" y="0" width="3" height="12" rx="1" fill={TEXT}/><rect x="13.5" y="0" width="3" height="12" rx="1" fill={TEXT} opacity="0.3"/></svg>
+        <svg width="16" height="12" viewBox="0 0 16 12"><path d="M8 2.5C5.5 2.5 3.3 3.5 1.7 5.2L0 3.5C2 1.3 4.8 0 8 0s6 1.3 8 3.5l-1.7 1.7C12.7 3.5 10.5 2.5 8 2.5z" fill={TEXT}/><path d="M8 6.5c-1.5 0-2.8.6-3.8 1.6L2.5 6.4C3.9 4.9 5.8 4 8 4s4.1.9 5.5 2.4l-1.7 1.7C10.8 7.1 9.5 6.5 8 6.5z" fill={TEXT}/><circle cx="8" cy="11" r="1.5" fill={TEXT}/></svg>
+        <svg width="25" height="12" viewBox="0 0 25 12"><rect x="0" y="1" width="22" height="10" rx="3" stroke={TEXT} strokeWidth="1.2" fill="none"/><rect x="1.5" y="2.5" width="17" height="7" rx="1.5" fill={TEXT}/><rect x="22.5" y="3.5" width="2" height="5" rx="1" fill={TEXT} opacity="0.4"/></svg>
+      </div>
+    </div>
+  );
+}
+
+// ── Bottom Nav ─────────────────────────────────────
+function BottomNav({ active, setActive }) {
+  const tabs = [
+    { id: 'home',       label: 'Home',     Icon: HomeIcon },
+    { id: 'attendance', label: 'History',  Icon: CalIcon },
+    { id: 'profile',    label: 'Profile',  Icon: UserIcon },
+    { id: 'settings',   label: 'Settings', Icon: SettingsIcon },
+  ];
+  return (
+    <div style={{padding: '10px 20px 30px', flexShrink: 0, background: BG}}>
+      <div style={{background: GREEN, borderRadius: 50, display:'flex', alignItems:'center', padding: '6px 6px', gap: 2}}>
+        {tabs.map(({id, label, Icon}) => {
+          const isActive = active === id;
+          return (
+            <button key={id} onClick={() => setActive(id)}
+              style={{
+                flex: isActive ? 2 : 1,
+                display:'flex', flexDirection:'row', alignItems:'center', justifyContent:'center',
+                gap: isActive ? 8 : 0,
+                padding: isActive ? '11px 18px' : '11px 8px',
+                border:'none',
+                background: isActive ? GOLD : 'transparent',
+                borderRadius: 40,
+                cursor:'pointer',
+                transition:'all 0.25s cubic-bezier(0.34,1.56,0.64,1)',
+                minWidth: 0,
+              }}>
+              <Icon active={isActive}/>
+              {isActive && <span style={{fontSize: 13, fontWeight: 700, color: '#fff', letterSpacing: 0.2, whiteSpace:'nowrap'}}>{label}</span>}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── HOME SCREEN ────────────────────────────────────
+function HomeScreen({ userName, avatarUrl, tweaks = {} }) {
+  const [now, setNow] = useState(new Date());
+  const [punchState, setPunchState] = useState('idle'); // idle | in | break | out
+  const [checkInTime, setCheckInTime] = useState(null);
+  const [checkOutTime, setCheckOutTime] = useState(null);
+  const [breakStart, setBreakStart] = useState(null);
+  const [totalBreak, setTotalBreak] = useState(0);
+  const [elapsed, setElapsed] = useState(0);
+  const [burstKey, setBurstKey] = useState(null);
+  const [holdProgress, setHoldProgress] = useState(0);
+  const holdRef = useRef(null);
+  const holdStartRef = useRef(null);
+  const HOLD_DURATION = 5000;
+
+  useEffect(() => {
+    const t = setInterval(() => {
+      setNow(new Date());
+      if ((punchState === 'in' || punchState === 'break') && checkInTime)
+        setElapsed(Date.now() - checkInTime);
+    }, 1000);
+    return () => clearInterval(t);
+  }, [punchState, checkInTime]);
+
+  function fmtElapsed(ms) {
+    const s = Math.floor(ms/1000);
+    const h = Math.floor(s/3600);
+    const m = Math.floor((s%3600)/60);
+    return pad(h)+'h '+pad(m)+'m';
+  }
+
+  function handleTap() {
+    if (punchState === 'idle') {
+      setCheckInTime(Date.now()); setPunchState('in'); setBurstKey(Date.now());
+    } else if (punchState === 'in') {
+      setBreakStart(Date.now()); setPunchState('break'); setBurstKey(Date.now());
+    } else if (punchState === 'break') {
+      setTotalBreak(tb => tb + Date.now() - (breakStart || Date.now()));
+      setBreakStart(null); setPunchState('in'); setBurstKey(Date.now());
+    }
+  }
+
+  function startHold() {
+    if (punchState === 'out' || punchState === 'idle') return;
+    holdStartRef.current = Date.now();
+    holdRef.current = setInterval(() => {
+      const p = Math.min(1, (Date.now() - holdStartRef.current) / HOLD_DURATION);
+      setHoldProgress(p);
+      if (p >= 1) {
+        clearInterval(holdRef.current); holdRef.current = null;
+        setCheckOutTime(Date.now());
+        if (punchState === 'break') setTotalBreak(tb => tb + Date.now() - (breakStart || Date.now()));
+        setPunchState('out'); setHoldProgress(0);
+      }
+    }, 30);
+  }
+
+  function stopHold() {
+    if (holdRef.current) { clearInterval(holdRef.current); holdRef.current = null; }
+    setHoldProgress(0);
+  }
+
+  const tGreen = tweaks.accentColor || GREEN;
+  const tGold  = tweaks.goldColor  || GOLD;
+  const tSize  = tweaks.buttonSize || 160;
+  const tSpeed = tweaks.rippleSpeed || 2;
+  const tRipple = tweaks.showRipple !== false;
+
+  const punchConfig = {
+    idle:  { label: 'Punch In',    color: tGreen,    sub: 'Tap to start' },
+    in:    { label: 'Start Break', color: tGold,     sub: 'Hold 5s to punch out' },
+    break: { label: 'Stop Break',  color: '#E07070', sub: 'Hold 5s to punch out' },
+    out:   { label: 'Done',        color: MUTED,     sub: 'Punched out' },
+  };
+  const pc = punchConfig[punchState];
+
+  const days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+  const R = tSize / 2 - 6;
+  const CIRC = 2 * Math.PI * R;
+  const dashOffset = CIRC * (1 - holdProgress);
+
+  return (
+    <div style={{flex:1, display:'flex', flexDirection:'column', background: BG, overflow:'hidden'}}>
+      {/* Header */}
+      <div style={{padding:'4px 22px 8px', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0}}>
+        <div>
+          <p style={{fontSize:11, color:MUTED, fontWeight:500}}>Good morning! Mark your attendance</p>
+          <h2 style={{fontSize:20, fontWeight:800, color:TEXT, marginTop:1}}>Hey {userName || 'there'}!</h2>
+        </div>
+        <div style={{width:40, height:40, borderRadius:20, overflow:'hidden', background:'#E8E8E0', border:'2px solid '+tGreen}}>
+          {avatarUrl
+            ? <img src={avatarUrl} style={{width:'100%',height:'100%',objectFit:'cover'}}/>
+            : <div style={{width:'100%',height:'100%',display:'flex',alignItems:'center',justifyContent:'center',background:tGreen,color:'#fff',fontWeight:700,fontSize:16}}>{(userName||'U')[0].toUpperCase()}</div>
+          }
+        </div>
+      </div>
+
+      {/* CENTER FOCAL SECTION */}
+      <div style={{flex:1, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:'0 0 8px'}}>
+
+        {/* Time + date */}
+        <div style={{textAlign:'center', marginBottom:20}}>
+          <div style={{fontSize:52, fontWeight:800, color:TEXT, letterSpacing:-2, lineHeight:1}}>{fmtTime(now)}</div>
+          <div style={{fontSize:12, color:MUTED, fontWeight:500, marginTop:8, letterSpacing:0.4}}>
+            {months[now.getMonth()]} {now.getDate()}, {now.getFullYear()} · {days[now.getDay()]}
+          </div>
+        </div>
+
+        {/* Hint */}
+        <div style={{fontSize:11, color:MUTED, fontWeight:500, marginBottom:12, letterSpacing:0.3, textAlign:'center'}}>
+          {pc.sub}
+        </div>
+
+        {/* Single Multi-Action Button */}
+        <div style={{position:'relative', width: tSize+80, height: tSize+80, display:'flex', alignItems:'center', justifyContent:'center', marginBottom:20}}>
+          {tRipple && punchState !== 'out' && [0,1,2].map(i => (
+            <div key={i} className="ripple-ring" style={{
+              width: tSize, height: tSize, border: '2px solid '+pc.color,
+              opacity: 0, top: '50%', left: '50%',
+              marginTop: -tSize/2, marginLeft: -tSize/2,
+              animationDuration: tSpeed+'s',
+            }}/>
+          ))}
+          {burstKey && <div key={burstKey} className="burst-ring" style={{
+            width: tSize, height: tSize, border: '3px solid '+pc.color,
+            top: '50%', left: '50%', marginTop: -tSize/2, marginLeft: -tSize/2,
+          }}/>}
+
+          {holdProgress > 0 && (
+            <svg style={{position:'absolute', top:'50%', left:'50%',
+              marginTop:-(tSize/2+6), marginLeft:-(tSize/2+6),
+              zIndex:3, transform:'rotate(-90deg)', pointerEvents:'none'}}
+              width={tSize+12} height={tSize+12}>
+              <circle cx={(tSize+12)/2} cy={(tSize+12)/2} r={R}
+                fill="none" stroke="#E8E5E0" strokeWidth="4"/>
+              <circle cx={(tSize+12)/2} cy={(tSize+12)/2} r={R}
+                fill="none" stroke="#C0392B" strokeWidth="4"
+                strokeDasharray={CIRC} strokeDashoffset={dashOffset}
+                strokeLinecap="round"/>
+            </svg>
+          )}
+
+          <button
+            onClick={handleTap}
+            onMouseDown={startHold}
+            onMouseUp={e => { stopHold(); e.currentTarget.style.transform='scale(1)'; }}
+            onMouseLeave={e => { stopHold(); e.currentTarget.style.transform='scale(1)'; }}
+            onTouchStart={startHold} onTouchEnd={stopHold}
+            disabled={punchState==='out'}
+            style={{
+              width: tSize, height: tSize, borderRadius: '50%', border: 'none',
+              cursor: punchState==='out' ? 'default' : 'pointer',
+              background: 'linear-gradient(145deg, #ffffff, #dddbd6)',
+              boxShadow: '10px 10px 24px rgba(0,0,0,0.15), -7px -7px 18px rgba(255,255,255,0.98)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              transition: 'transform 0.15s', position: 'relative', zIndex: 2,
+              userSelect: 'none', WebkitUserSelect: 'none',
+            }}
+          >
+            <div style={{width:tSize*0.825, height:tSize*0.825, borderRadius:'50%',
+              background:'linear-gradient(145deg,#ebebea,#fafaf8)',
+              boxShadow:'inset 5px 5px 12px rgba(0,0,0,0.1),inset -4px -4px 10px rgba(255,255,255,0.95)',
+              display:'flex', alignItems:'center', justifyContent:'center'}}>
+              <div style={{width:tSize*0.625, height:tSize*0.625, borderRadius:'50%',
+                background:'linear-gradient(145deg,#f8f7f3,#e8e6e1)',
+                boxShadow:'4px 4px 10px rgba(0,0,0,0.12),-3px -3px 8px rgba(255,255,255,0.9)',
+                display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:6}}>
+                <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
+                  <path d="M12 12c2.2 0 4-1.8 4-4s-1.8-4-4-4-4 1.8-4 4 1.8 4 4 4z" fill={pc.color}/>
+                  <path d="M12 14c-5.3 0-8 2.7-8 4v1h16v-1c0-1.3-2.7-4-8-4z" fill={pc.color}/>
+                </svg>
+                <span style={{fontSize:11, fontWeight:800, color:pc.color, letterSpacing:0.6}}>{pc.label}</span>
+                {holdProgress > 0 && (
+                  <span style={{fontSize:9, fontWeight:700, color:'#C0392B', letterSpacing:0.3}}>
+                    {Math.ceil((1 - holdProgress) * 5)}s
+                  </span>
+                )}
+              </div>
+            </div>
+          </button>
+        </div>
+
+        {/* Stats Row */}
+        <div style={{width:'100%', display:'flex', padding:'0 24px', marginBottom:16}}>
+          {[
+            {label:'Check In',   val:checkInTime?fmtTime(new Date(checkInTime)):'--:--', Icon:CheckInIcon},
+            {label:'Break Time', val:totalBreak>0?fmtElapsed(totalBreak):(punchState==='break'?'Active':'--:--'), Icon:CheckOutIcon},
+            {label:'Total Hrs',  val:checkInTime&&punchState!=='idle'?fmtElapsed(elapsed):'--:--', Icon:TotalHrsIcon},
+          ].map((item,i) => (
+            <div key={item.label} style={{flex:1, display:'flex', flexDirection:'column', alignItems:'center', gap:5,
+              borderRight:i<2?'1px solid #E2E0DB':'none', padding:'0 6px'}}>
+              <item.Icon color={tGreen}/>
+              <div style={{fontSize:12, fontWeight:700, color:TEXT, letterSpacing:0.2}}>{item.val}</div>
+              <div style={{fontSize:10, color:MUTED, fontWeight:600, letterSpacing:0.3, textAlign:'center'}}>{item.label}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Est. Punch-Out */}
+        {(punchState==='in'||punchState==='break') && (() => {
+          const estMs = checkInTime + 9*3600*1000;
+          const remaining = estMs - Date.now();
+          const isDone = remaining <= 0;
+          const remH = Math.max(0,Math.floor(remaining/3600000));
+          const remM = Math.max(0,Math.floor((remaining%3600000)/60000));
+          return (
+            <div style={{width:'100%', padding:'0 24px'}}>
+              <div style={{padding:'13px 18px', background:isDone?tGreen+'12':'#fff',
+                borderRadius:18, border:'1px solid '+(isDone?tGreen+'40':'#ECEAE5'),
+                boxShadow:'0 2px 12px rgba(0,0,0,0.05)',
+                display:'flex', alignItems:'center', justifyContent:'space-between'}}>
+                <div style={{display:'flex', alignItems:'center', gap:12}}>
+                  <div style={{width:36, height:36, borderRadius:18, background:tGreen+'15',
+                    display:'flex', alignItems:'center', justifyContent:'center'}}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={tGreen} strokeWidth="2.2" strokeLinecap="round">
+                      <circle cx="12" cy="13" r="8"/>
+                      <line x1="12" y1="9" x2="12" y2="13"/>
+                      <line x1="12" y1="13" x2="15" y2="15"/>
+                      <path d="M9 2h6M12 2v3"/>
+                    </svg>
+                  </div>
+                  <div>
+                    <div style={{fontSize:10, color:MUTED, fontWeight:600, marginBottom:1}}>Est. Punch-Out</div>
+                    <div style={{fontSize:16, fontWeight:800, color:tGreen}}>{fmtTime(new Date(estMs))}</div>
+                  </div>
+                </div>
+                <div style={{textAlign:'right'}}>
+                  <div style={{fontSize:10, color:MUTED, fontWeight:600, marginBottom:1}}>{isDone?'Overtime':'Remaining'}</div>
+                  <div style={{fontSize:14, fontWeight:800, color:isDone?'#C0392B':TEXT}}>
+                    {isDone?'+'+fmtElapsed(Math.abs(remaining)):pad(remH)+'h '+pad(remM)+'m'}
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* Break banner */}
+        {punchState==='break' && (
+          <div style={{width:'100%', padding:'10px 24px 0'}}>
+            <div style={{padding:'11px 16px', background:tGold+'18', borderRadius:14,
+              border:'1px solid '+tGold+'44', display:'flex', alignItems:'center', gap:10}}>
+              <div style={{width:32, height:32, borderRadius:16, background:tGold+'25',
+                display:'flex', alignItems:'center', justifyContent:'center'}}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={tGold} strokeWidth="2.2" strokeLinecap="round">
+                  <path d="M17 8h1a4 4 0 010 8h-1"/>
+                  <path d="M3 8h14v9a4 4 0 01-4 4H7a4 4 0 01-4-4V8z"/>
+                  <line x1="6" y1="1" x2="6" y2="4"/>
+                  <line x1="10" y1="1" x2="10" y2="4"/>
+                  <line x1="14" y1="1" x2="14" y2="4"/>
+                </svg>
+              </div>
+              <div>
+                <div style={{fontSize:12, fontWeight:700, color:tGold}}>On Break</div>
+                <div style={{fontSize:10, color:MUTED}}>Hold button 5s to punch out</div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── ATTENDANCE SCREEN ──────────────────────────────
+function AttendanceScreen() {
+  const [data, setData] = useState(buildAttendanceData);
+  const [selected, setSelected] = useState(null);
+  const [showMenu, setShowMenu] = useState(null);
+
+  function setLeave(id, type) {
+    setData(prev => prev.map(d => d.id === id ? {...d, leaveType: type, status: type} : d));
+    setShowMenu(null);
+  }
+
+  const statusStyle = {
+    present: { bg:'#E8F5EE', color: GREEN, label:'Present' },
+    weekend: { bg:'#F0F0F0', color: MUTED, label:'Weekend' },
+    'full-leave': { bg:'#FEF3E2', color:GOLD, label:'Full Leave' },
+    'half-leave': { bg:'#FFF0F0', color:'#E07070', label:'Half Day' },
+  };
+
+  return (
+    <div style={{flex:1, display:'flex', flexDirection:'column', background:BG, overflow:'hidden'}}>
+      <div style={{padding:'4px 24px 14px'}}>
+        <h2 style={{fontSize:22, fontWeight:800, color:TEXT}}>Attendance</h2>
+        <p style={{fontSize:13, color:MUTED, fontWeight:500}}>Last 30 days overview</p>
+      </div>
+
+      {/* Summary chips */}
+      <div style={{display:'flex', gap:10, padding:'0 24px 14px'}}>
+        {[
+          {label:'Present', count: data.filter(d=>d.status==='present').length, color:GREEN},
+          {label:'Leave',   count: data.filter(d=>['full-leave','half-leave'].includes(d.leaveType)).length, color:GOLD},
+          {label:'Weekend', count: data.filter(d=>d.isWeekend).length, color:MUTED},
+        ].map(c=>(
+          <div key={c.label} style={{flex:1, background:CARD, borderRadius:14, padding:'10px 8px', textAlign:'center', boxShadow:'0 2px 10px rgba(0,0,0,0.05)'}}>
+            <div style={{fontSize:20, fontWeight:800, color:c.color}}>{c.count}</div>
+            <div style={{fontSize:10, color:MUTED, fontWeight:600}}>{c.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* List */}
+      <div style={{flex:1, overflowY:'auto', padding:'0 24px 8px'}}>
+        {[...data].reverse().map(item => {
+          const st = statusStyle[item.leaveType || (item.isWeekend ? 'weekend' : 'present')] || statusStyle.present;
+          return (
+            <div key={item.id} style={{marginBottom:10}}>
+              <div style={{background:CARD, borderRadius:18, padding:'14px 16px', boxShadow:'0 2px 12px rgba(0,0,0,0.06)', display:'flex', alignItems:'center', gap:14}}>
+                {/* Date badge */}
+                <div style={{background: item.isWeekend ? '#F0F0F0' : GREEN, borderRadius:14, width:48, height:54, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', flexShrink:0}}>
+                  <span style={{fontSize:22, fontWeight:800, color: item.isWeekend?MUTED:'#fff', lineHeight:1}}>{item.dayNum}</span>
+                  <span style={{fontSize:10, fontWeight:700, color: item.isWeekend?MUTED:'rgba(255,255,255,0.8)', letterSpacing:0.5}}>{item.dayName.toUpperCase()}</span>
+                </div>
+
+                {/* Times */}
+                <div style={{flex:1, minWidth:0}}>
+                  {item.isWeekend || item.leaveType ? (
+                    <div style={{fontSize:14, fontWeight:700, color:MUTED}}>{item.leaveType==='full-leave'?'Full Day Leave':item.leaveType==='half-leave'?'Half Day Leave':'Weekend'}</div>
+                  ) : (
+                    <div style={{display:'flex', gap:12}}>
+                      {[
+                        {label:'In',  val:item.checkIn||'--'},
+                        {label:'Out', val:item.checkOut||'--'},
+                        {label:'Hrs', val:item.totalHrs||'--'},
+                      ].map(f=>(
+                        <div key={f.label}>
+                          <div style={{fontSize:12, fontWeight:700, color:TEXT}}>{f.val}</div>
+                          <div style={{fontSize:10, color:MUTED, fontWeight:500}}>{f.label}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div style={{fontSize:11, color:MUTED, marginTop:4}}>{item.month} {item.dayNum}</div>
+                </div>
+
+                {/* Status + menu */}
+                <div style={{display:'flex', flexDirection:'column', alignItems:'flex-end', gap:6}}>
+                  <span style={{fontSize:10, fontWeight:700, padding:'3px 8px', borderRadius:20, background:st.bg, color:st.color}}>{st.label}</span>
+                  {!item.isWeekend && (
+                    <button onClick={() => setShowMenu(showMenu===item.id?null:item.id)}
+                      style={{background:'none', border:'none', cursor:'pointer', color:MUTED, fontSize:18, lineHeight:1, padding:'2px 4px'}}>⋯</button>
+                  )}
+                </div>
+              </div>
+
+              {/* Dropdown */}
+              {showMenu === item.id && (
+                <div style={{background:CARD, borderRadius:14, marginTop:4, boxShadow:'0 4px 20px rgba(0,0,0,0.12)', overflow:'hidden'}}>
+                  {[
+                    {label:'Mark Full Day Leave', type:'full-leave'},
+                    {label:'Mark Half Day Leave', type:'half-leave'},
+                    {label:'Mark as Present',     type:null},
+                  ].map(opt=>(
+                    <button key={opt.label} onClick={()=>setLeave(item.id, opt.type)}
+                      style={{width:'100%', padding:'13px 18px', background:'none', border:'none', borderBottom:'1px solid #F0F0F0', cursor:'pointer', textAlign:'left', fontSize:13, fontWeight:600, color: opt.type==='full-leave'?GOLD : opt.type==='half-leave'?'#E07070':GREEN, fontFamily:'Plus Jakarta Sans, sans-serif'}}>
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── PROFILE SCREEN ─────────────────────────────────
+function ProfileScreen({ userName, setUserName, avatarUrl, setAvatarUrl }) {
+  const [nameInput, setNameInput] = useState(userName || '');
+  const fileRef = useRef();
+
+  function handleSave() {
+    setUserName(nameInput.trim() || 'User');
+  }
+
+  function handleFile(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => setAvatarUrl(ev.target.result);
+    reader.readAsDataURL(file);
+  }
+
+  return (
+    <div style={{flex:1, display:'flex', flexDirection:'column', background:BG, overflowY:'auto'}}>
+      <div style={{padding:'4px 24px 20px'}}>
+        <h2 style={{fontSize:22, fontWeight:800, color:TEXT}}>Profile</h2>
+        <p style={{fontSize:13, color:MUTED}}>Your personal information</p>
+      </div>
+
+      {/* Avatar */}
+      <div style={{display:'flex', flexDirection:'column', alignItems:'center', marginBottom:28}}>
+        <div style={{position:'relative', marginBottom:12}}>
+          <div style={{width:100, height:100, borderRadius:50, overflow:'hidden', background:'#E8E8E0', border:`3px solid ${GREEN}`, boxShadow:'0 4px 20px rgba(0,0,0,0.12)'}}>
+            {avatarUrl
+              ? <img src={avatarUrl} style={{width:'100%',height:'100%',objectFit:'cover'}}/>
+              : <div style={{width:'100%',height:'100%',display:'flex',alignItems:'center',justifyContent:'center',background:GREEN,color:'#fff',fontWeight:800,fontSize:36}}>{(nameInput||'U')[0].toUpperCase()}</div>
+            }
+          </div>
+          <button onClick={()=>fileRef.current.click()}
+            style={{position:'absolute', bottom:0, right:0, width:30, height:30, borderRadius:15, background:GOLD, border:'2px solid #fff', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center'}}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
+          </button>
+          <input type="file" accept="image/*" ref={fileRef} onChange={handleFile} style={{display:'none'}}/>
+        </div>
+        <div style={{fontSize:12, color:MUTED, fontWeight:500}}>Tap camera to change photo</div>
+      </div>
+
+      {/* Form */}
+      <div style={{padding:'0 24px'}}>
+        <div style={{background:CARD, borderRadius:22, padding:20, boxShadow:'0 2px 14px rgba(0,0,0,0.06)', marginBottom:14}}>
+          <label style={{fontSize:12, fontWeight:700, color:MUTED, letterSpacing:0.5, display:'block', marginBottom:8}}>FULL NAME</label>
+          <input value={nameInput} onChange={e=>setNameInput(e.target.value)}
+            placeholder="Enter your name"
+            style={{width:'100%', border:'none', outline:'none', fontSize:17, fontWeight:600, color:TEXT, background:'transparent', fontFamily:'Plus Jakarta Sans, sans-serif'}}/>
+        </div>
+
+        {/* Non-editable info */}
+        {[
+          {label:'ROLE', val:'Employee'},
+          {label:'DEPARTMENT', val:'General'},
+          {label:'JOINED', val:'April 2026'},
+        ].map(row=>(
+          <div key={row.label} style={{background:CARD, borderRadius:18, padding:'14px 20px', boxShadow:'0 2px 10px rgba(0,0,0,0.05)', marginBottom:10, display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+            <span style={{fontSize:12, fontWeight:700, color:MUTED, letterSpacing:0.4}}>{row.label}</span>
+            <span style={{fontSize:14, fontWeight:600, color:TEXT}}>{row.val}</span>
+          </div>
+        ))}
+
+        <button onClick={handleSave}
+          style={{width:'100%', marginTop:10, padding:'16px', borderRadius:20, border:'none', background:GREEN, color:'#fff', fontSize:16, fontWeight:700, cursor:'pointer', fontFamily:'Plus Jakarta Sans, sans-serif', boxShadow:`0 4px 16px ${GREEN}55`}}>
+          Save Changes
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── SETTINGS SCREEN ────────────────────────────────
+function SettingsScreen() {
+  const [notifs, setNotifs] = useState(true);
+  const [dark, setDark] = useState(false);
+  const [reminders, setReminders] = useState(true);
+
+  const Toggle = ({on, set}) => (
+    <div onClick={()=>set(!on)} style={{width:46, height:26, borderRadius:13, background:on?GREEN:'#D0D0D0', cursor:'pointer', position:'relative', transition:'background 0.2s'}}>
+      <div style={{position:'absolute', top:3, left:on?23:3, width:20, height:20, borderRadius:10, background:'#fff', boxShadow:'0 1px 4px rgba(0,0,0,0.2)', transition:'left 0.2s'}}/>
+    </div>
+  );
+
+  const sections = [
+    {
+      title: 'Notifications',
+      items: [
+        {label:'Push Notifications', sub:'Receive attendance reminders', toggle:true, val:notifs, set:setNotifs},
+        {label:'Daily Reminders',    sub:'Reminder to punch in/out',    toggle:true, val:reminders, set:setReminders},
+      ]
+    },
+    {
+      title: 'Appearance',
+      items: [
+        {label:'Dark Mode', sub:'Switch to dark theme', toggle:true, val:dark, set:setDark},
+      ]
+    },
+    {
+      title: 'General',
+      items: [
+        {label:'Work Hours', sub:'Set your default shift hours', arrow:true},
+        {label:'Week Start', sub:'Configure work week start day', arrow:true},
+        {label:'Language',   sub:'English (US)',                arrow:true},
+      ]
+    },
+    {
+      title: 'About',
+      items: [
+        {label:'Version',       sub:'1.0.0'},
+        {label:'Privacy Policy', sub:'', arrow:true},
+        {label:'Terms of Service', sub:'', arrow:true},
+      ]
+    },
+  ];
+
+  return (
+    <div style={{flex:1, display:'flex', flexDirection:'column', background:BG, overflowY:'auto'}}>
+      <div style={{padding:'4px 24px 20px'}}>
+        <h2 style={{fontSize:22, fontWeight:800, color:TEXT}}>Settings</h2>
+        <p style={{fontSize:13, color:MUTED}}>Manage your preferences</p>
+      </div>
+
+      <div style={{padding:'0 24px'}}>
+        {sections.map(sec=>(
+          <div key={sec.title} style={{marginBottom:18}}>
+            <div style={{fontSize:11, fontWeight:800, color:MUTED, letterSpacing:1, marginBottom:8, paddingLeft:4}}>{sec.title.toUpperCase()}</div>
+            <div style={{background:CARD, borderRadius:18, boxShadow:'0 2px 10px rgba(0,0,0,0.05)', overflow:'hidden'}}>
+              {sec.items.map((item,i)=>(
+                <div key={item.label} style={{padding:'14px 18px', display:'flex', alignItems:'center', justifyContent:'space-between', borderBottom: i<sec.items.length-1?'1px solid #F2F2F0':'none'}}>
+                  <div>
+                    <div style={{fontSize:14, fontWeight:600, color:TEXT}}>{item.label}</div>
+                    {item.sub && <div style={{fontSize:11, color:MUTED, marginTop:2}}>{item.sub}</div>}
+                  </div>
+                  {item.toggle && <Toggle on={item.val} set={item.set}/>}
+                  {item.arrow && <svg width="7" height="12" viewBox="0 0 7 12" fill="none"><path d="M1 1l5 5-5 5" stroke={MUTED} strokeWidth="2" strokeLinecap="round"/></svg>}
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+
+        {/* Sign out placeholder */}
+        <button style={{width:'100%', padding:'15px', borderRadius:18, border:`1.5px solid #FFDDDD`, background:'#FFF5F5', color:'#E07070', fontSize:15, fontWeight:700, cursor:'pointer', fontFamily:'Plus Jakarta Sans, sans-serif', marginBottom:20}}>
+          Clear All Data
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── ROOT APP ───────────────────────────────────────
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "accentColor": "#1B4D35",
+  "goldColor": "#C9A55A",
+  "rippleSpeed": 2,
+  "buttonSize": 160,
+  "showRipple": true
+}/*EDITMODE-END*/;
+
+function App() {
+  const [tab, setTab] = useState('home');
+  const [userName, setUserName] = useState(localStorage.getItem('tracker_name') || '');
+  const [avatarUrl, setAvatarUrl] = useState(localStorage.getItem('tracker_avatar') || '');
+  const { tweaks, showTweaks, setShowTweaks } = useTweaks(TWEAK_DEFAULTS);
+
+  function saveName(n) { setUserName(n); localStorage.setItem('tracker_name', n); }
+  function saveAvatar(u) { setAvatarUrl(u); localStorage.setItem('tracker_avatar', u); }
+
+  return (
+    <div style={{display:'flex', flexDirection:'column', height:'100%', background:BG, position:'relative'}}>
+      <StatusBar/>
+      <div style={{flex:1, overflow:'hidden', display:'flex', flexDirection:'column'}}>
+        {tab === 'home'       && <HomeScreen userName={userName} avatarUrl={avatarUrl} tweaks={tweaks}/>}
+        {tab === 'attendance' && <AttendanceScreen tweaks={tweaks}/>}
+        {tab === 'profile'    && <ProfileScreen userName={userName} setUserName={saveName} avatarUrl={avatarUrl} setAvatarUrl={saveAvatar} tweaks={tweaks}/>}
+        {tab === 'settings'   && <SettingsScreen tweaks={tweaks}/>}
+      </div>
+      <BottomNav active={tab} setActive={setTab} tweaks={tweaks}/>
+
+      {showTweaks && (
+        <TweaksPanel onClose={() => setShowTweaks(false)}>
+          <TweakSection title="Button Ripple">
+            <TweakToggle  id="showRipple"  label="Show Ripple Rings" tweaks={tweaks}/>
+            <TweakSlider  id="rippleSpeed" label="Ripple Speed (s)" min={0.8} max={4} step={0.1} tweaks={tweaks}/>
+            <TweakSlider  id="buttonSize"  label="Button Size (px)"  min={120} max={200} step={4} tweaks={tweaks}/>
+          </TweakSection>
+          <TweakSection title="Colors">
+            <TweakColor id="accentColor" label="Primary Green" tweaks={tweaks}/>
+            <TweakColor id="goldColor"   label="Gold Accent"   tweaks={tweaks}/>
+          </TweakSection>
+        </TweaksPanel>
+      )}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+
+
+</body></html>

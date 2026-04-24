@@ -1,53 +1,65 @@
-/**
- * Below are the colors that are used in the app. The colors are defined in the light and dark mode.
- * There are many other ways to style your app. For example, [Nativewind](https://www.nativewind.dev/), [Tamagui](https://tamagui.dev/), [unistyles](https://reactnativeunistyles.vercel.app), etc.
- */
-
 import { Platform } from 'react-native';
 
-const tintColorLight = '#0a7ea4';
-const tintColorDark = '#fff';
+const palette = {
+  primary: '#1B4D35',
+  primaryLight: '#2D6A4F',
+  accent: '#C9A55A',
+  background: '#F4F3EF',
+  card: '#FFFFFF',
+  text: '#1A1A1A',
+  muted: '#9B9B9B',
+  border: '#E2E0DB',
+  success: '#1B4D35',
+  error: '#C0392B',
+  warning: '#C9A55A',
+  weekend: '#F0F0F0',
+};
 
 export const Colors = {
+  ...palette, // Keep flat version for direct access
   light: {
-    text: '#11181C',
-    background: '#fff',
-    tint: tintColorLight,
-    icon: '#687076',
-    tabIconDefault: '#687076',
-    tabIconSelected: tintColorLight,
+    text: palette.text,
+    background: palette.background,
+    tint: palette.primary,
+    icon: palette.muted,
+    tabIconDefault: palette.muted,
+    tabIconSelected: palette.primary,
+    // Add other keys required by standard components if any
+    card: palette.card,
+    border: palette.border,
+    primary: palette.primary,
+    accent: palette.accent,
   },
   dark: {
     text: '#ECEDEE',
     background: '#151718',
-    tint: tintColorDark,
+    tint: '#fff',
     icon: '#9BA1A6',
     tabIconDefault: '#9BA1A6',
-    tabIconSelected: tintColorDark,
+    tabIconSelected: '#fff',
+    card: '#1C1C1E',
+    border: '#333',
+    primary: palette.primary,
+    accent: palette.accent,
   },
 };
 
-export const Fonts = Platform.select({
-  ios: {
-    /** iOS `UIFontDescriptorSystemDesignDefault` */
-    sans: 'system-ui',
-    /** iOS `UIFontDescriptorSystemDesignSerif` */
-    serif: 'ui-serif',
-    /** iOS `UIFontDescriptorSystemDesignRounded` */
-    rounded: 'ui-rounded',
-    /** iOS `UIFontDescriptorSystemDesignMonospaced` */
-    mono: 'ui-monospace',
+export const Typography = {
+  fontFamily: Platform.select({
+    ios: 'PlusJakartaSans-Bold',
+    android: 'PlusJakartaSans-Bold',
+    default: 'System',
+  }),
+  weights: {
+    regular: '400',
+    medium: '500',
+    semibold: '600',
+    bold: '700',
+    extraBold: '800',
   },
-  default: {
-    sans: 'normal',
-    serif: 'serif',
-    rounded: 'normal',
-    mono: 'monospace',
-  },
-  web: {
-    sans: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
-    serif: "Georgia, 'Times New Roman', serif",
-    rounded: "'SF Pro Rounded', 'Hiragino Maru Gothic ProN', Meiryo, 'MS PGothic', sans-serif",
-    mono: "SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
-  },
-});
+};
+
+export const Fonts = {
+  rounded: Typography.fontFamily,
+  mono: 'System',
+};
