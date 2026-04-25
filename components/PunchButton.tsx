@@ -97,10 +97,10 @@ export function PunchButton({ status, onPress, onHoldComplete }: PunchButtonProp
   const handlePressIn = () => {
     if (status === 'out' || status === 'break') return; // Disable hold during break
     holdFinished.value = 0;
-    
+
     scale.value = withSpring(0.9, { damping: 12, stiffness: 200 });
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    
+
     if (status === 'in') {
       setHoldActive(true);
       progress.value = withTiming(1, { duration: 5000 }, (finished) => {
@@ -126,18 +126,18 @@ export function PunchButton({ status, onPress, onHoldComplete }: PunchButtonProp
 
   const handlePress = () => {
     if (holdFinished.value === 1) {
-        holdFinished.value = 0;
-        return;
+      holdFinished.value = 0;
+      return;
     }
     if (status !== 'out') {
-        onPress();
+      onPress();
     }
   };
 
   return (
     <View style={styles.container}>
       <Text style={styles.subText}>{pc.sub}</Text>
-      
+
       <View style={styles.buttonWrapper}>
         {/* Ripples */}
         {status === 'in' && (
@@ -197,17 +197,17 @@ export function PunchButton({ status, onPress, onHoldComplete }: PunchButtonProp
                   end={{ x: 1, y: 1 }}
                 >
                   {!holdActive ? (
-                      <>
-                        <User size={26} color={pc.color} fill={pc.color} />
-                        <Text style={[styles.buttonLabel, { color: pc.color }]}>{pc.label.toUpperCase()}</Text>
-                      </>
+                    <>
+                      <User size={26} color={pc.color} fill={pc.color} />
+                      <Text style={[styles.buttonLabel, { color: pc.color }]}>{pc.label.toUpperCase()}</Text>
+                    </>
                   ) : (
-                      <View style={styles.timerContent}>
-                          <Text style={styles.timerValue}>
-                            {Math.ceil((1 - displayProgress) * 5)}
-                          </Text>
-                          <Text style={styles.timerSec}>SEC</Text>
-                      </View>
+                    <View style={styles.timerContent}>
+                      <Text style={styles.timerValue}>
+                        {Math.ceil((1 - displayProgress) * 5)}
+                      </Text>
+                      <Text style={styles.timerSec}>SEC</Text>
+                    </View>
                   )}
                 </LinearGradient>
               </LinearGradient>
@@ -295,8 +295,8 @@ const styles = StyleSheet.create({
     letterSpacing: 0.6,
   },
   timerContent: {
-      alignItems: 'center',
-      justifyContent: 'center',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   timerValue: {
     fontSize: 32,
@@ -305,10 +305,10 @@ const styles = StyleSheet.create({
     lineHeight: 34,
   },
   timerSec: {
-      fontSize: 10,
-      fontFamily: 'PlusJakartaSans-Bold',
-      color: Colors.error,
-      letterSpacing: 1,
-      marginTop: -2,
+    fontSize: 10,
+    fontFamily: 'PlusJakartaSans-Bold',
+    color: Colors.error,
+    letterSpacing: 1,
+    marginTop: -2,
   }
 });

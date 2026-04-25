@@ -1,5 +1,5 @@
-import { useEffect } from 'react';
-import { Stack } from 'expo-router';
+import { useEffect, useState } from 'react';
+import { Stack, router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import { 
@@ -11,11 +11,15 @@ import {
   PlusJakartaSans_800ExtraBold 
 } from '@expo-google-fonts/plus-jakarta-sans';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
-  const [loaded, error] = useFonts({
+  const [isReady, setIsReady] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+
+  const [fontsLoaded, fontError] = useFonts({
     'PlusJakartaSans-Regular': PlusJakartaSans_400Regular,
     'PlusJakartaSans-Medium': PlusJakartaSans_500Medium,
     'PlusJakartaSans-SemiBold': PlusJakartaSans_600SemiBold,
@@ -24,12 +28,31 @@ export default function RootLayout() {
   });
 
   useEffect(() => {
-    if (loaded || error) {
-      SplashScreen.hideAsync();
+    async function prepare() {
+      try {
+        const onboardingComplete = await AsyncStorage.getItem('ONBOARDING_COMPLETE');
+        if (!onboardingComplete) {
+          setShowOnboarding(true);
+        }
+      } catch (e) {
+        console.warn(e);
+      } finally {
+        setIsReady(true);
+      }
     }
-  }, [loaded, error]);
+    prepare();
+  }, []);
 
-  if (!loaded && !error) {
+  useEffect(() => {
+    if ((fontsLoaded || fontError) && isReady) {
+      SplashScreen.hideAsync();
+      if (showOnboarding) {
+        router.replace('/onboarding');
+      }
+    }
+  }, [fontsLoaded, fontError, isReady, showOnboarding]);
+
+  if (!fontsLoaded && !fontError) {
     return null;
   }
 
@@ -37,6 +60,7 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen name="onboarding" options={{ headerShown: false }} />
         <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
       </Stack>
       <StatusBar style="dark" />

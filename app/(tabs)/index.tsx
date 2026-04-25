@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, Image } from 'react-native';
+import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors } from '@/constants/theme';
 import { PunchButton } from '@/components/PunchButton';
 import { StatCard } from '@/components/StatCard';
-import { Coffee, AlarmClock } from 'lucide-react-native';
+import { AlarmClock, Coffee } from 'lucide-react-native';
 import { CheckInIcon, CheckOutIcon, TotalHrsIcon } from '@/components/AttendanceIcons';
 import * as Haptics from 'expo-haptics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -21,6 +21,7 @@ export default function HomeScreen() {
   const [totalBreak, setTotalBreak] = useState(0); // in ms
   const [elapsed, setElapsed] = useState(0); // in ms
   const [isLoaded, setIsLoaded] = useState(false);
+  const [userName, setUserName] = useState('Jithin');
 
   // Load state on mount
   useEffect(() => {
@@ -34,6 +35,12 @@ export default function HomeScreen() {
           if (parsed.checkOutTime) setCheckOutTime(new Date(parsed.checkOutTime));
           if (parsed.breakStart) setBreakStart(new Date(parsed.breakStart));
           setTotalBreak(parsed.totalBreak || 0);
+        }
+
+        const profileSaved = await AsyncStorage.getItem('USER_PROFILE');
+        if (profileSaved) {
+          const prof = JSON.parse(profileSaved);
+          if (prof.name) setUserName(prof.name.split(' ')[0]);
         }
       } catch (e) {
         console.error('Failed to load state', e);
@@ -68,12 +75,19 @@ export default function HomeScreen() {
     const t = setInterval(() => {
       const d = new Date();
       setNow(d);
-      if ((punchState === 'in' || punchState === 'break') && checkInTime) {
-        setElapsed(Date.now() - checkInTime.getTime());
+      
+      if (checkInTime) {
+        if (punchState === 'in') {
+          setElapsed(Date.now() - checkInTime.getTime() - totalBreak);
+        } else if (punchState === 'break' && breakStart) {
+          // Live update for display
+        } else {
+            setElapsed(Date.now() - checkInTime.getTime() - totalBreak);
+        }
       }
     }, 1000);
     return () => clearInterval(t);
-  }, [punchState, checkInTime]);
+  }, [punchState, checkInTime, totalBreak, breakStart]);
 
   const fmtTime = (d: Date) => {
     let h = d.getHours();
@@ -138,21 +152,24 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* Header */}
-        <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
-          <View>
-            <Text style={styles.headerSub}>{getGreeting()}! Mark your attendance</Text>
-            <Text style={styles.headerTitle}>Hey Jithin!</Text>
-          </View>
-          <View style={styles.avatarWrapper}>
-            <View style={styles.avatar}>
-               <Text style={styles.avatarText}>J</Text>
-            </View>
+      {/* Static Header */}
+      <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
+        <View>
+          <Text style={styles.headerSub}>{getGreeting()}! Mark your attendance</Text>
+          <Text style={styles.headerTitle}>Hey {userName}!</Text>
+        </View>
+        <View style={styles.avatarWrapper}>
+          <View style={styles.avatar}>
+             <Text style={styles.avatarText}>{userName[0]}</Text>
           </View>
         </View>
+      </View>
 
-        {/* Center Focal Section */}
+      {/* Scrollable Content */}
+      <ScrollView 
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
         <View style={styles.focalSection}>
           <View style={styles.clockContainer}>
             <Text style={styles.clockTime}>
@@ -180,7 +197,11 @@ export default function HomeScreen() {
             />
             <StatCard 
               label="Break Time" 
-              value={totalBreak > 0 ? fmtElapsed(totalBreak) : (punchState === 'break' ? 'Active' : '--:--')} 
+              value={
+                punchState === 'break' && breakStart 
+                  ? fmtElapsed(totalBreak + (Date.now() - breakStart.getTime())) 
+                  : (totalBreak > 0 ? fmtElapsed(totalBreak) : '--:--')
+              } 
               Icon={CheckOutIcon} 
             />
             <StatCard 
@@ -205,12 +226,12 @@ export default function HomeScreen() {
                         <Text style={styles.bannerValue}>{fmtTime(new Date(estMs))}</Text>
                     </View>
                     </View>
-                    <View style={styles.bannerRight}>
-                    <Text style={styles.bannerLabel}>{isDone ? 'Overtime' : 'Remaining'}</Text>
-                    <Text style={[styles.bannerTime, isDone && styles.textError]}>
-                        {isDone ? `+${fmtElapsed(Math.abs(remaining))}` : fmtElapsed(remaining)}
-                    </Text>
-                    </View>
+                <View style={styles.bannerRight}>
+                  <Text style={styles.bannerLabel}>{isDone ? 'Overtime' : 'Remaining'}</Text>
+                  <Text style={[styles.bannerTime, isDone && styles.textError]}>
+                    {isDone ? `+${fmtElapsed(Math.abs(remaining))}` : fmtElapsed(remaining)}
+                  </Text>
+                </View>
                 </View>
                 </View>
             )}
@@ -240,17 +261,14 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.background,
   },
-  scrollContent: {
-    flexGrow: 1,
-    paddingBottom: 120,
-  },
   header: {
     paddingHorizontal: 22,
-    paddingTop: 10,
-    paddingBottom: 8,
+    paddingBottom: 15,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    backgroundColor: Colors.background,
+    zIndex: 10,
   },
   headerSub: {
     fontSize: 11,
@@ -283,10 +301,14 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: 'PlusJakartaSans-Bold',
   },
+  scrollContent: {
+    flexGrow: 1,
+    paddingBottom: 120,
+  },
   focalSection: {
     flex: 1,
     alignItems: 'center',
-    paddingTop: 20,
+    paddingTop: 10,
   },
   clockContainer: {
     alignItems: 'center',

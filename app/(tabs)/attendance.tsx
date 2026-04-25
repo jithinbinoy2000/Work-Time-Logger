@@ -1,129 +1,87 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-
 import { Colors } from '@/constants/theme';
 import { AttendanceItem, AttendanceStatus } from '@/components/AttendanceItem';
-
-interface AttendanceData {
-  id: number;
-  date: Date;
-  dayNum: number;
-  dayName: string;
-  month: string;
-  isWeekend: boolean;
-  status: AttendanceStatus;
-  checkIn: string | null;
-  checkOut: string | null;
-  totalHrs: string | null;
-  leaveType: AttendanceStatus | null;
-}
-
-function buildAttendanceData(): AttendanceData[] {
-  const today = new Date();
-  const data: AttendanceData[] = [];
-  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
-  for (let i = 29; i >= 0; i--) {
-    const d = new Date(today);
-    d.setDate(today.getDate() - i);
-    const dow = d.getDay();
-    const isWeekend = dow === 0 || dow === 6;
-    
-    data.push({
-      id: i,
-      date: d,
-      dayNum: d.getDate(),
-      dayName: dayNames[dow],
-      month: monthNames[d.getMonth()],
-      isWeekend,
-      status: isWeekend ? 'weekend' : 'present',
-      checkIn: isWeekend ? null : '09:00 AM',
-      checkOut: isWeekend ? null : (i === 0 ? null : '06:00 PM'),
-      totalHrs: isWeekend ? null : (i === 0 ? null : '09:00'),
-      leaveType: isWeekend ? 'weekend' : null,
-    });
-  }
-  return data;
-}
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ChevronLeft, ChevronRight, Calendar } from 'lucide-react-native';
 
 export default function AttendanceScreen() {
   const insets = useSafeAreaInsets();
+  const [currentMonth, setCurrentMonth] = useState('April 2026');
 
-  const [data, setData] = useState<AttendanceData[]>(buildAttendanceData());
-  const [showMenuId, setShowMenuId] = useState<number | null>(null);
+  const summary = [
+    { label: 'Present', count: '18', color: Colors.primary },
+    { label: 'Absent', count: '02', color: Colors.error },
+    { label: 'Leaves', count: '01', color: Colors.accent },
+  ];
 
-  const setLeave = (id: number, type: AttendanceStatus | null) => {
-    setData(prev => prev.map(d => d.id === id ? { ...d, leaveType: type, status: type || 'present' } : d));
-    setShowMenuId(null);
-  };
-
-  const presentCount = data.filter(d => d.status === 'present').length;
-  const leaveCount = data.filter(d => d.status === 'full-leave' || d.status === 'half-leave').length;
-  const weekendCount = data.filter(d => d.isWeekend).length;
+  const data: Array<{
+    dayNum: number;
+    dayName: string;
+    month: string;
+    checkIn: string | null;
+    checkOut: string | null;
+    totalHrs: string | null;
+    isWeekend: boolean;
+    leaveType: AttendanceStatus | null;
+  }> = [
+    { dayNum: 24, dayName: 'Friday', month: 'Apr', checkIn: '09:00 AM', checkOut: null, totalHrs: null, isWeekend: false, leaveType: null },
+    { dayNum: 23, dayName: 'Thursday', month: 'Apr', checkIn: '08:55 AM', checkOut: '06:10 PM', totalHrs: '9.2', isWeekend: false, leaveType: null },
+    { dayNum: 22, dayName: 'Wednesday', month: 'Apr', checkIn: '09:10 AM', checkOut: '06:05 PM', totalHrs: '8.9', isWeekend: false, leaveType: null },
+    { dayNum: 21, dayName: 'Tuesday', month: 'Apr', checkIn: null, checkOut: null, totalHrs: null, isWeekend: false, leaveType: 'full-leave' },
+    { dayNum: 20, dayName: 'Monday', month: 'Apr', checkIn: '09:05 AM', checkOut: '06:15 PM', totalHrs: '9.1', isWeekend: false, leaveType: null },
+    { dayNum: 19, dayName: 'Sunday', month: 'Apr', checkIn: null, checkOut: null, totalHrs: null, isWeekend: true, leaveType: 'weekend' },
+    { dayNum: 18, dayName: 'Saturday', month: 'Apr', checkIn: null, checkOut: null, totalHrs: null, isWeekend: true, leaveType: 'weekend' },
+    { dayNum: 17, dayName: 'Friday', month: 'Apr', checkIn: '08:50 AM', checkOut: '05:45 PM', totalHrs: '8.9', isWeekend: false, leaveType: null },
+  ];
 
   return (
     <View style={styles.container}>
+      {/* Static Header */}
       <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
-        <Text style={styles.title}>Attendance</Text>
-        <Text style={styles.subtitle}>Last 30 days overview</Text>
+        <View style={styles.headerTop}>
+          <Text style={styles.title}>Attendance</Text>
+          <TouchableOpacity style={styles.calendarBtn}>
+            <Calendar size={18} color={Colors.primary} />
+          </TouchableOpacity>
+        </View>
+
+        {/* Month Selector */}
+        <View style={styles.monthSelector}>
+          <TouchableOpacity>
+            <ChevronLeft size={20} color={Colors.muted} />
+          </TouchableOpacity>
+          <Text style={styles.monthText}>{currentMonth}</Text>
+          <TouchableOpacity>
+            <ChevronRight size={20} color={Colors.muted} />
+          </TouchableOpacity>
+        </View>
+
+        {/* Summary Row */}
+        <View style={styles.summaryRow}>
+          {summary.map(s => (
+            <View key={s.label} style={styles.summaryItem}>
+              <Text style={[styles.summaryCount, { color: s.color }]}>{s.count}</Text>
+              <Text style={styles.summaryLabel}>{s.label}</Text>
+            </View>
+          ))}
+        </View>
       </View>
 
-      {/* Summary chips */}
-      <View style={styles.summaryRow}>
-        {[
-          { label: 'Present', count: presentCount, color: Colors.primary },
-          { label: 'Leave', count: leaveCount, color: Colors.accent },
-          { label: 'Weekend', count: weekendCount, color: Colors.muted },
-        ].map(c => (
-          <View key={c.label} style={styles.summaryChip}>
-            <Text style={[styles.summaryCount, { color: c.color }]}>{c.count}</Text>
-            <Text style={styles.summaryLabel}>{c.label}</Text>
-          </View>
-        ))}
-      </View>
-
-      {/* List */}
-      <ScrollView contentContainerStyle={styles.listContent}>
-        {[...data].reverse().map(item => (
-          <View key={item.id}>
+      {/* Scrollable List */}
+      <ScrollView 
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.listContainer}>
+          {data.map((item, index) => (
             <AttendanceItem
-              dayNum={item.dayNum}
-              dayName={item.dayName}
-              month={item.month}
-              checkIn={item.checkIn}
-              checkOut={item.checkOut}
-              totalHrs={item.totalHrs}
-              isWeekend={item.isWeekend}
-              leaveType={item.leaveType}
-              onMenuPress={() => setShowMenuId(showMenuId === item.id ? null : item.id)}
+              key={index}
+              {...item}
+              onMenuPress={() => {}}
             />
-            
-            {showMenuId === item.id && (
-              <View style={styles.dropdown}>
-                <TouchableOpacity 
-                  style={styles.dropdownItem} 
-                  onPress={() => setLeave(item.id, 'full-leave')}
-                >
-                  <Text style={[styles.dropdownText, { color: Colors.accent }]}>Mark Full Day Leave</Text>
-                </TouchableOpacity>
-                <TouchableOpacity 
-                  style={styles.dropdownItem} 
-                  onPress={() => setLeave(item.id, 'half-leave')}
-                >
-                  <Text style={[styles.dropdownText, { color: '#E07070' }]}>Mark Half Day Leave</Text>
-                </TouchableOpacity>
-                <TouchableOpacity 
-                  style={[styles.dropdownItem, styles.noBorder]} 
-                  onPress={() => setLeave(item.id, null)}
-                >
-                  <Text style={[styles.dropdownText, { color: Colors.primary }]}>Mark as Present</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-          </View>
-        ))}
+          ))}
+        </View>
       </ScrollView>
     </View>
   );
@@ -136,74 +94,75 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingHorizontal: 24,
-    paddingTop: 10,
-    paddingBottom: 14,
+    backgroundColor: Colors.background,
+    zIndex: 10,
+    paddingBottom: 10,
+  },
+  headerTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 15,
   },
   title: {
     fontSize: 22,
     fontFamily: 'PlusJakartaSans-ExtraBold',
     color: Colors.text,
   },
-  subtitle: {
-    fontSize: 13,
-    color: Colors.muted,
-    fontFamily: 'PlusJakartaSans-Medium',
+  calendarBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: Colors.card,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#ECEAE5',
+  },
+  monthSelector: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 20,
+    marginBottom: 15,
+  },
+  monthText: {
+    fontSize: 15,
+    fontFamily: 'PlusJakartaSans-Bold',
+    color: Colors.text,
   },
   summaryRow: {
     flexDirection: 'row',
-    gap: 10,
-    paddingHorizontal: 24,
-    paddingBottom: 14,
-  },
-  summaryChip: {
-    flex: 1,
     backgroundColor: Colors.card,
-    borderRadius: 14,
-    paddingVertical: 10,
-    alignItems: 'center',
+    borderRadius: 18,
+    paddingVertical: 14,
+    borderWidth: 1,
+    borderColor: '#ECEAE5',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
+    shadowOpacity: 0.04,
     shadowRadius: 10,
     elevation: 2,
   },
+  summaryItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
   summaryCount: {
-    fontSize: 20,
+    fontSize: 18,
     fontFamily: 'PlusJakartaSans-ExtraBold',
   },
   summaryLabel: {
     fontSize: 10,
-    color: Colors.muted,
     fontFamily: 'PlusJakartaSans-Bold',
+    color: Colors.muted,
+    marginTop: 1,
   },
-  listContent: {
+  scrollContent: {
+    paddingBottom: 120,
+  },
+  listContainer: {
     paddingHorizontal: 24,
-    paddingBottom: 20,
-  },
-  dropdown: {
-    backgroundColor: Colors.card,
-    borderRadius: 14,
-    marginTop: -4,
-    marginBottom: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 20,
-    elevation: 4,
-    overflow: 'hidden',
-    zIndex: 10,
-  },
-  dropdownItem: {
-    paddingVertical: 13,
-    paddingHorizontal: 18,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
-  },
-  noBorder: {
-    borderBottomWidth: 0,
-  },
-  dropdownText: {
-    fontSize: 13,
-    fontFamily: 'PlusJakartaSans-SemiBold',
+    paddingTop: 10,
   },
 });

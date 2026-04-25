@@ -56,8 +56,7 @@ export default function SettingsScreen() {
           onPress: async () => {
             try {
               await AsyncStorage.removeItem('OFFICE_TIMER_STATE');
-              Alert.alert("Success", "All local data has been cleared. Please restart the app or return to Home.");
-              // Optionally trigger a reload or navigate
+              Alert.alert("Success", "All local data has been cleared.");
               router.replace('/');
             } catch (e) {
               Alert.alert("Error", "Failed to clear data.");
@@ -102,12 +101,17 @@ export default function SettingsScreen() {
 
   return (
     <View style={styles.container}>
-      <ScrollView contentContainerStyle={[styles.scrollContent, { paddingBottom: 120 }]}>
-        <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
-          <Text style={styles.title}>Settings</Text>
-          <Text style={styles.subtitle}>Manage your preferences</Text>
-        </View>
+      {/* Static Header */}
+      <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
+        <Text style={styles.title}>Settings</Text>
+        <Text style={styles.subtitle}>Manage your preferences</Text>
+      </View>
 
+      {/* Scrollable Content */}
+      <ScrollView 
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
         <View style={styles.content}>
           {sections.map(sec => (
             <View key={sec.title} style={styles.section}>
@@ -148,13 +152,11 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.background,
   },
-  scrollContent: {
-    paddingBottom: 40,
-  },
   header: {
     paddingHorizontal: 24,
-    paddingTop: 10,
     paddingBottom: 20,
+    backgroundColor: Colors.background,
+    zIndex: 10,
   },
   title: {
     fontSize: 22,
@@ -166,8 +168,12 @@ const styles = StyleSheet.create({
     color: Colors.muted,
     fontFamily: 'PlusJakartaSans-Medium',
   },
+  scrollContent: {
+    paddingBottom: 120,
+  },
   content: {
     paddingHorizontal: 24,
+    paddingTop: 10,
   },
   section: {
     marginBottom: 18,
