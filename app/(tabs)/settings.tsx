@@ -125,8 +125,8 @@ export default function SettingsScreen() {
                     </View>
                     {item.type === 'toggle' && (
                       <CustomToggle
-                        value={item.value!}
-                        onValueChange={item.setter!}
+                        value={(item as any).value!}
+                        onValueChange={(item as any).setter!}
                       />
                     )}
                     {item.type === 'arrow' && (

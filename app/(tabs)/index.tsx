@@ -8,6 +8,11 @@ import { AlarmClock, Coffee } from 'lucide-react-native';
 import { CheckInIcon, CheckOutIcon, TotalHrsIcon } from '@/components/AttendanceIcons';
 import * as Haptics from 'expo-haptics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import ConfettiCannon from 'react-native-confetti-cannon';
+import { Dimensions } from 'react-native';
+import Animated, { useSharedValue, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
+
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 const STORAGE_KEY = 'OFFICE_TIMER_STATE';
 
@@ -22,6 +27,19 @@ export default function HomeScreen() {
   const [elapsed, setElapsed] = useState(0); // in ms
   const [isLoaded, setIsLoaded] = useState(false);
   const [userName, setUserName] = useState('Jithin');
+  const [showConfetti, setShowConfetti] = useState(false);
+  const colonOpacity = useSharedValue(1);
+
+  useEffect(() => {
+    colonOpacity.value = withRepeat(
+      withSequence(
+        withTiming(0.2, { duration: 500 }),
+        withTiming(1, { duration: 500 })
+      ),
+      -1,
+      true
+    );
+  }, []);
 
   // Load state on mount
   useEffect(() => {
@@ -105,31 +123,75 @@ export default function HomeScreen() {
     return `${h}h ${m}m`;
   };
 
+  const appendToHistory = async (action: 'in' | 'out' | 'break-start' | 'break-end', time: Date, totalMs?: number) => {
+    try {
+      const historyStr = await AsyncStorage.getItem('ATTENDANCE_HISTORY');
+      let history = historyStr ? JSON.parse(historyStr) : [];
+      const dateStr = time.toISOString().split('T')[0]; // YYYY-MM-DD
+      
+      let dayRecord = history.find((h: any) => h.date === dateStr);
+      if (!dayRecord) {
+        dayRecord = { date: dateStr, logs: [], checkIn: null, checkOut: null, totalBreakMs: 0, totalMs: null };
+        history.push(dayRecord);
+      }
+
+      let label = 'Action';
+      if (action === 'in') { label = 'Punched In'; if (!dayRecord.checkIn) dayRecord.checkIn = time.toISOString(); }
+      if (action === 'out') { label = 'Punched Out'; dayRecord.checkOut = time.toISOString(); dayRecord.totalMs = totalMs; }
+      if (action === 'break-start') label = 'Break Started';
+      if (action === 'break-end') { label = 'Break Ended'; dayRecord.totalBreakMs = totalBreak; }
+
+      dayRecord.logs.push({
+        time: fmtTime(time),
+        type: action,
+        label,
+        timestamp: time.getTime()
+      });
+
+      await AsyncStorage.setItem('ATTENDANCE_HISTORY', JSON.stringify(history));
+    } catch (e) {
+      console.error('Failed to append to history', e);
+    }
+  };
+
   const handlePunchPress = () => {
+    const nowTime = new Date();
     if (punchState === 'idle') {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      setCheckInTime(new Date());
+      setCheckInTime(nowTime);
       setPunchState('in');
+      appendToHistory('in', nowTime);
     } else if (punchState === 'in') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      setBreakStart(new Date());
+      setBreakStart(nowTime);
       setPunchState('break');
+      appendToHistory('break-start', nowTime);
     } else if (punchState === 'break') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       if (breakStart) {
-        setTotalBreak(prev => prev + (Date.now() - breakStart.getTime()));
+        setTotalBreak(prev => prev + (nowTime.getTime() - breakStart.getTime()));
       }
       setBreakStart(null);
       setPunchState('in');
+      appendToHistory('break-end', nowTime);
     }
   };
 
   const handleHoldComplete = () => {
-    setCheckOutTime(new Date());
+    const nowTime = new Date();
+    setCheckOutTime(nowTime);
+    let finalBreak = totalBreak;
     if (punchState === 'break' && breakStart) {
-      setTotalBreak(prev => prev + (Date.now() - breakStart.getTime()));
+      finalBreak += (nowTime.getTime() - breakStart.getTime());
+      setTotalBreak(finalBreak);
     }
     setPunchState('out');
+    
+    // Calculate total ms worked
+    const totalWorked = checkInTime ? (nowTime.getTime() - checkInTime.getTime() - finalBreak) : 0;
+    appendToHistory('out', nowTime, totalWorked);
+
+    setShowConfetti(true);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   };
 
@@ -173,7 +235,9 @@ export default function HomeScreen() {
         <View style={styles.focalSection}>
           <View style={styles.clockContainer}>
             <Text style={styles.clockTime}>
-              {now.getHours().toString().padStart(2, '0')}:{now.getMinutes().toString().padStart(2, '0')}
+              {now.getHours().toString().padStart(2, '0')}
+              <Animated.Text style={{ opacity: colonOpacity }}>:</Animated.Text>
+              {now.getMinutes().toString().padStart(2, '0')}
             </Text>
             <Text style={styles.clockDate}>
               {months[now.getMonth()]} {now.getDate()}, {now.getFullYear()} · {days[now.getDay()]}
@@ -194,6 +258,7 @@ export default function HomeScreen() {
               label="Check In" 
               value={checkInTime ? fmtTime(checkInTime) : '--:--'} 
               Icon={CheckInIcon} 
+              isActive={punchState !== 'idle'}
             />
             <StatCard 
               label="Break Time" 
@@ -203,11 +268,13 @@ export default function HomeScreen() {
                   : (totalBreak > 0 ? fmtElapsed(totalBreak) : '--:--')
               } 
               Icon={CheckOutIcon} 
+              isActive={punchState === 'break'}
             />
             <StatCard 
               label="Total Hrs" 
               value={checkInTime && punchState !== 'idle' ? fmtElapsed(elapsed) : '--:--'} 
               Icon={TotalHrsIcon} 
+              isActive={punchState === 'in'}
               isLast 
             />
           </View>
@@ -235,23 +302,18 @@ export default function HomeScreen() {
                 </View>
                 </View>
             )}
-
-            {punchState === 'break' && (
-                <View style={styles.breakBannerContainer}>
-                <View style={styles.breakBanner}>
-                    <View style={styles.breakIconWrapper}>
-                    <Coffee size={16} color={Colors.accent} strokeWidth={2.2} />
-                    </View>
-                    <View>
-                    <Text style={styles.breakTitle}>On Break</Text>
-                    <Text style={styles.breakSub}>Hold button 5s to punch out</Text>
-                    </View>
-                </View>
-                </View>
-            )}
           </View>
         </View>
       </ScrollView>
+      {showConfetti && (
+        <ConfettiCannon 
+          count={200} 
+          origin={{ x: SCREEN_WIDTH / 2, y: SCREEN_HEIGHT }} 
+          autoStart={true}
+          fadeOut={true}
+          onAnimationEnd={() => setShowConfetti(false)}
+        />
+      )}
     </View>
   );
 }
@@ -303,23 +365,24 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
-    paddingBottom: 120,
+    paddingBottom: 100, // Slightly reduced but still safe for the tab bar
   },
   focalSection: {
     flex: 1,
     alignItems: 'center',
-    paddingTop: 10,
+    justifyContent: 'center', // Center content vertically
+    paddingVertical: 20, // Add breathing room
   },
   clockContainer: {
     alignItems: 'center',
     marginBottom: 10,
   },
   clockTime: {
-    fontSize: 64,
+    fontSize: 80,
     fontFamily: 'PlusJakartaSans-ExtraBold',
     color: Colors.text,
     letterSpacing: -2,
-    lineHeight: 72,
+    lineHeight: 88,
   },
   clockDate: {
     fontSize: 12,
@@ -400,38 +463,5 @@ const styles = StyleSheet.create({
   },
   textError: {
     color: Colors.error,
-  },
-  breakBannerContainer: {
-    width: '100%',
-    paddingHorizontal: 24,
-  },
-  breakBanner: {
-    backgroundColor: Colors.accent + '18',
-    borderRadius: 14,
-    paddingVertical: 11,
-    paddingHorizontal: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    borderWidth: 1,
-    borderColor: Colors.accent + '44',
-  },
-  breakIconWrapper: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: Colors.accent + '25',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  breakTitle: {
-    fontSize: 12,
-    fontFamily: 'PlusJakartaSans-Bold',
-    color: Colors.accent,
-  },
-  breakSub: {
-    fontSize: 10,
-    color: Colors.muted,
-    fontFamily: 'PlusJakartaSans-Regular',
   },
 });

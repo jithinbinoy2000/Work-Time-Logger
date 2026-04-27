@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system';
 import { 
     Camera as CameraIcon, 
     MapPin as MapPinIcon, 
@@ -58,10 +59,22 @@ export default function ProfileScreen() {
     });
 
     if (!result.canceled) {
+      const asset = result.assets[0];
+      const fileName = asset.uri.split('/').pop() || 'avatar.jpg';
+      const newPath = `${(FileSystem as any).documentDirectory}${fileName}`;
+      
+      let finalUri = asset.uri;
+      try {
+        await FileSystem.copyAsync({ from: asset.uri, to: newPath });
+        finalUri = newPath;
+      } catch (e) {
+        console.error('Failed to copy image to local storage', e);
+      }
+
       if (isEditing) {
-          setTempProfile(p => ({ ...p, avatarUri: result.assets[0].uri }));
+          setTempProfile(p => ({ ...p, avatarUri: finalUri }));
       } else {
-          const newProfile = { ...profile, avatarUri: result.assets[0].uri };
+          const newProfile = { ...profile, avatarUri: finalUri };
           setProfile(newProfile);
           await AsyncStorage.setItem('USER_PROFILE', JSON.stringify(newProfile));
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -178,11 +191,11 @@ export default function ProfileScreen() {
         <View style={styles.infoList}>
           <Text style={styles.sectionTitle}>PERSONAL INFORMATION</Text>
           <View style={styles.infoCard}>
-            <InfoRow icon={BriefcaseIcon} label="DEPARTMENT" value={isEditing ? tempProfile.dept : profile.dept} isEditing={isEditing} onChangeText={(t) => setTempProfile(p => ({ ...p, dept: t }))} />
-            <InfoRow icon={CalendarIcon} label="JOINED DATE" value={isEditing ? tempProfile.joined : profile.joined} isEditing={isEditing} onChangeText={(t) => setTempProfile(p => ({ ...p, joined: t }))} />
-            <InfoRow icon={MailIcon} label="EMAIL" value={isEditing ? tempProfile.email : profile.email} isEditing={isEditing} onChangeText={(t) => setTempProfile(p => ({ ...p, email: t }))} keyboardType="email-address" />
-            <InfoRow icon={PhoneIcon} label="PHONE" value={isEditing ? tempProfile.phone : profile.phone} isEditing={isEditing} onChangeText={(t) => setTempProfile(p => ({ ...p, phone: t }))} keyboardType="phone-pad" />
-            <InfoRow icon={MapPinIcon} label="LOCATION" value={isEditing ? tempProfile.location : profile.location} isEditing={isEditing} onChangeText={(t) => setTempProfile(p => ({ ...p, location: t }))} isLast />
+            <InfoRow icon={BriefcaseIcon} label="DEPARTMENT" value={isEditing ? tempProfile.dept : profile.dept} isEditing={isEditing} onChangeText={(t: string) => setTempProfile(p => ({ ...p, dept: t }))} />
+            <InfoRow icon={CalendarIcon} label="JOINED DATE" value={isEditing ? tempProfile.joined : profile.joined} isEditing={isEditing} onChangeText={(t: string) => setTempProfile(p => ({ ...p, joined: t }))} />
+            <InfoRow icon={MailIcon} label="EMAIL" value={isEditing ? tempProfile.email : profile.email} isEditing={isEditing} onChangeText={(t: string) => setTempProfile(p => ({ ...p, email: t }))} keyboardType="email-address" />
+            <InfoRow icon={PhoneIcon} label="PHONE" value={isEditing ? tempProfile.phone : profile.phone} isEditing={isEditing} onChangeText={(t: string) => setTempProfile(p => ({ ...p, phone: t }))} keyboardType="phone-pad" />
+            <InfoRow icon={MapPinIcon} label="LOCATION" value={isEditing ? tempProfile.location : profile.location} isEditing={isEditing} onChangeText={(t: string) => setTempProfile(p => ({ ...p, location: t }))} isLast />
           </View>
         </View>
       </ScrollView>

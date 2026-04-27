@@ -1,9 +1,9 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Colors } from '@/constants/theme';
 import { MoreHorizontal } from 'lucide-react-native';
+import React from 'react';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
-export type AttendanceStatus = 'present' | 'full-leave' | 'half-leave' | 'weekend';
+export type AttendanceStatus = 'present' | 'full-leave' | 'half-leave' | 'weekend' | 'holiday';
 
 interface AttendanceItemProps {
   dayNum: number;
@@ -15,6 +15,8 @@ interface AttendanceItemProps {
   isWeekend: boolean;
   leaveType: AttendanceStatus | null;
   onMenuPress: () => void;
+  isSelected?: boolean;
+  onPress?: () => void;
 }
 
 export function AttendanceItem({
@@ -27,47 +29,94 @@ export function AttendanceItem({
   isWeekend,
   leaveType,
   onMenuPress,
+  isSelected,
+  onPress,
 }: AttendanceItemProps) {
-  
+
   const getStatusLabel = () => {
     if (leaveType === 'full-leave') return 'Full Day Leave';
     if (leaveType === 'half-leave') return 'Half Day Leave';
-    return dayName;
+    if (leaveType === 'holiday') return 'Holiday';
+    if (isWeekend) return 'Weekend';
+    return 'Present';
   };
 
   const getStatusColor = () => {
-    if (leaveType) return Colors.accent;
-    return Colors.text;
+    if (leaveType === 'full-leave') return Colors.accent;
+    if (leaveType === 'half-leave') return '#E07070';
+    if (leaveType === 'holiday') return Colors.primary;
+    if (isWeekend) return Colors.muted;
+    return Colors.primary;
+  };
+
+  const getStatusBg = () => {
+    if (leaveType === 'full-leave') return '#FEF3E2';
+    if (leaveType === 'half-leave') return '#FFF0F0';
+    if (leaveType === 'holiday') return '#E8F5EE';
+    if (isWeekend) return '#F0F0F0';
+    return '#E8F5EE';
   };
 
   return (
-    <View style={[styles.container, isWeekend && styles.weekend]}>
+    <TouchableOpacity
+      activeOpacity={0.7}
+      onPress={onPress}
+      style={[styles.container, isWeekend && styles.weekend, isSelected && styles.selected]}
+    >
       <View style={styles.left}>
-        <View style={styles.dateBlock}>
-          <Text style={styles.dayNum}>{dayNum}</Text>
-          <Text style={styles.month}>{month.toUpperCase()}</Text>
+        <View style={[styles.dateBlock, { backgroundColor: isWeekend ? '#F0F0F0' : Colors.primary }]}>
+          <Text style={[styles.dayNum, { color: isWeekend ? Colors.muted : '#FFF' }]}>{dayNum}</Text>
+          <Text style={[styles.dayName, { color: isWeekend ? Colors.muted : 'rgba(255,255,255,0.8)' }]}>
+            {dayName.substring(0, 3).toUpperCase()}
+          </Text>
         </View>
         <View style={styles.info}>
-          <Text style={[styles.statusLabel, { color: getStatusColor() }]}>
-            {getStatusLabel()}
-          </Text>
-          {checkIn && (
-            <Text style={styles.timeLabel}>
-              {checkIn} — {checkOut || 'Active'}
-            </Text>
+          {isWeekend || leaveType ? (
+            <View>
+              <Text style={styles.leaveText}>
+                {leaveType === 'full-leave' ? 'Full Day Leave' : leaveType === 'half-leave' ? 'Half Day Leave' : leaveType === 'holiday' ? 'Holiday' : 'Weekend'}
+              </Text>
+              <Text style={styles.dateSubText}>{month} {dayNum}</Text>
+            </View>
+          ) : (
+            <View>
+              <View style={styles.timesGrid}>
+                <View style={styles.timeColumn}>
+                  <Text style={styles.timeVal}>{checkIn || '--'}</Text>
+                  <Text style={styles.timeLabel}>In</Text>
+                </View>
+                <View style={styles.timeColumn}>
+                  <Text style={styles.timeVal}>{checkOut || '--'}</Text>
+                  <Text style={styles.timeLabel}>Out</Text>
+                </View>
+                <View style={styles.timeColumn}>
+                  <Text style={styles.timeVal}>{totalHrs || '--'}</Text>
+                  <Text style={styles.timeLabel}>Hrs</Text>
+                </View>
+              </View>
+              <Text style={styles.dateSubText}>{month} {dayNum}</Text>
+            </View>
           )}
         </View>
       </View>
       
       <View style={styles.right}>
-        {totalHrs && <Text style={styles.hrsLabel}>{totalHrs} hrs</Text>}
+        <View style={[styles.badge, { backgroundColor: getStatusBg() }]}>
+          <Text style={[styles.statusLabel, { color: getStatusColor() }]}>
+            {getStatusLabel()}
+          </Text>
+        </View>
         {!isWeekend && (
-          <TouchableOpacity onPress={onMenuPress} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+          <TouchableOpacity 
+            onPress={(e) => { e.stopPropagation(); onMenuPress(); }} 
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            style={styles.menuBtn}
+          >
             <MoreHorizontal size={20} color={Colors.muted} />
           </TouchableOpacity>
         )}
       </View>
-    </View>
+    </TouchableOpacity>
   );
 }
 
@@ -75,64 +124,96 @@ const styles = StyleSheet.create({
   container: {
     backgroundColor: Colors.card,
     borderRadius: 18,
-    paddingVertical: 15,
-    paddingHorizontal: 18,
-    marginBottom: 12,
+    padding: 16,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    marginBottom: 10,
     borderWidth: 1,
-    borderColor: '#ECEAE5',
+    borderColor: 'transparent',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.03,
-    shadowRadius: 8,
-    elevation: 1,
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    elevation: 2,
   },
   weekend: {
-    opacity: 0.7,
+    opacity: 1,
+  },
+  selected: {
+    borderColor: Colors.primary,
+    borderWidth: 1,
+    backgroundColor: Colors.card,
   },
   left: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 15,
+    gap: 14,
+    flex: 1,
   },
   dateBlock: {
+    width: 48,
+    height: 54,
+    borderRadius: 14,
     alignItems: 'center',
-    minWidth: 40,
+    justifyContent: 'center',
   },
   dayNum: {
-    fontSize: 18,
+    fontSize: 22,
     fontFamily: 'PlusJakartaSans-ExtraBold',
-    color: Colors.primary,
-    lineHeight: 20,
+    lineHeight: 24,
   },
-  month: {
+  dayName: {
     fontSize: 10,
     fontFamily: 'PlusJakartaSans-Bold',
-    color: Colors.muted,
-    marginTop: 1,
+    letterSpacing: 0.5,
+    marginTop: -2,
   },
   info: {
-    gap: 2,
+    flex: 1,
   },
-  statusLabel: {
+  leaveText: {
     fontSize: 14,
     fontFamily: 'PlusJakartaSans-Bold',
+    color: Colors.muted,
+  },
+  dateSubText: {
+    fontSize: 11,
+    fontFamily: 'PlusJakartaSans-Medium',
+    color: Colors.muted,
+    marginTop: 4,
+  },
+  timesGrid: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  timeColumn: {
+    alignItems: 'flex-start',
+  },
+  timeVal: {
+    fontSize: 12,
+    fontFamily: 'PlusJakartaSans-Bold',
+    color: Colors.text,
   },
   timeLabel: {
-    fontSize: 11,
+    fontSize: 10,
     fontFamily: 'PlusJakartaSans-Medium',
     color: Colors.muted,
   },
   right: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
+    alignItems: 'flex-end',
+    gap: 6,
   },
-  hrsLabel: {
-    fontSize: 12,
-    fontFamily: 'PlusJakartaSans-ExtraBold',
-    color: Colors.primary,
+  badge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 20,
+  },
+  statusLabel: {
+    fontSize: 10,
+    fontFamily: 'PlusJakartaSans-Bold',
+  },
+  menuBtn: {
+    padding: 2,
   },
 });

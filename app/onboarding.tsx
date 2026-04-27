@@ -7,6 +7,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system';
 
 const { width } = Dimensions.get('window');
 
@@ -37,7 +38,16 @@ export default function OnboardingScreen() {
     });
 
     if (!result.canceled) {
-      setAvatarUri(result.assets[0].uri);
+      const asset = result.assets[0];
+      const fileName = asset.uri.split('/').pop() || 'avatar.jpg';
+      const newPath = `${(FileSystem as any).documentDirectory}${fileName}`;
+      try {
+        await FileSystem.copyAsync({ from: asset.uri, to: newPath });
+        setAvatarUri(newPath);
+      } catch (e) {
+        console.error('Failed to copy image to local storage', e);
+        setAvatarUri(asset.uri);
+      }
     }
   };
 

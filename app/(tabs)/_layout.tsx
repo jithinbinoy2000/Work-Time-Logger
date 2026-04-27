@@ -34,13 +34,6 @@ export default function TabLayout() {
           title: 'Settings',
         }}
       />
-      {/* Hide the default explore tab if it exists */}
-      <Tabs.Screen
-        name="explore"
-        options={{
-          href: null,
-        }}
-      />
     </Tabs>
   );
 }

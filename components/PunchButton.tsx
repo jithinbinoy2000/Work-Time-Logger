@@ -14,12 +14,14 @@ import Animated, {
   useSharedValue,
   withRepeat,
   withSpring,
-  withTiming
+  withTiming,
+  withSequence,
+  SharedValue
 } from 'react-native-reanimated';
 import { Circle, Svg } from 'react-native-svg';
 
 const { width } = Dimensions.get('window');
-const BUTTON_SIZE = 160;
+const BUTTON_SIZE = 190;
 const RADIUS = (BUTTON_SIZE / 2) - 6;
 const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 
@@ -33,54 +35,71 @@ interface PunchButtonProps {
 
 export function PunchButton({ status, onPress, onHoldComplete }: PunchButtonProps) {
   const progress = useSharedValue(0);
-  const ripple = useSharedValue(0);
+  const ripple1 = useSharedValue(0);
+  const ripple2 = useSharedValue(0);
+  const ripple3 = useSharedValue(0);
   const scale = useSharedValue(1);
   const holdFinished = useSharedValue(0); // 0: false, 1: true
   const [holdActive, setHoldActive] = useState(false);
   const [displayProgress, setDisplayProgress] = useState(0);
 
   useEffect(() => {
-    // Ripples only in 'in' state to keep other states "calm"
-    if (status === 'in') {
-      ripple.value = 0;
-      ripple.value = withRepeat(
-        withTiming(1, { duration: 2000 }),
-        -1,
-        false
-      );
+    // Ripples in 'in' and 'break' states
+    if (status === 'in' || status === 'break') {
+      ripple1.value = 0; ripple2.value = 0; ripple3.value = 0;
+      ripple1.value = withRepeat(withTiming(1, { duration: 2000 }), -1, false);
+      
+      const t1 = setTimeout(() => {
+        ripple2.value = withRepeat(withTiming(1, { duration: 2000 }), -1, false);
+      }, 650);
+      
+      const t2 = setTimeout(() => {
+        ripple3.value = withRepeat(withTiming(1, { duration: 2000 }), -1, false);
+      }, 1300);
+
+      return () => {
+        clearTimeout(t1);
+        clearTimeout(t2);
+      };
     } else {
-      ripple.value = 0;
+      ripple1.value = 0; ripple2.value = 0; ripple3.value = 0;
     }
-  }, [status]);
+  }, [status, ripple1, ripple2, ripple3]);
 
   const punchConfig = {
     idle: { label: 'Punch In', color: Colors.primary, sub: 'Tap to start' },
-    in: { label: 'Start Break', color: Colors.accent, sub: 'Hold 5s to punch out' },
-    break: { label: 'Stop Break', color: '#E07070', sub: 'Tap to resume work' },
-    out: { label: 'Done', color: Colors.muted, sub: 'Punched out' },
+    in: { label: 'Start Break', color: Colors.accent, sub: '' },
+    break: { label: 'Stop Break', color: Colors.accent, sub: '' },
+    out: { label: 'Done', color: Colors.muted, sub: '' },
   };
 
   const pc = punchConfig[status];
 
-  const rippleStyle = useAnimatedStyle(() => {
-    const opacity = interpolate(
-      ripple.value,
-      [0, 0.7, 1],
-      [0.6, 0.3, 0],
-      Extrapolate.CLAMP
-    );
-    const s = interpolate(
-      ripple.value,
-      [0, 1],
-      [1, 1.6],
-      Extrapolate.CLAMP
-    );
-    return {
-      transform: [{ scale: s }],
-      opacity: opacity,
-      borderColor: pc.color,
-    };
-  });
+  const useRippleStyle = (rValue: SharedValue<number>) => {
+    return useAnimatedStyle(() => {
+      const opacity = interpolate(
+        rValue.value,
+        [0, 0.7, 1],
+        [0.55, 0.3, 0],
+        Extrapolate.CLAMP
+      );
+      const s = interpolate(
+        rValue.value,
+        [0, 1],
+        [0.88, 1.55],
+        Extrapolate.CLAMP
+      );
+      return {
+        transform: [{ scale: s }],
+        opacity: opacity,
+        borderColor: pc.color,
+      };
+    });
+  };
+
+  const rippleStyle1 = useRippleStyle(ripple1);
+  const rippleStyle2 = useRippleStyle(ripple2);
+  const rippleStyle3 = useRippleStyle(ripple3);
 
   const animatedProps = useAnimatedProps(() => {
     // Sync shared value to JS state for the timer text
@@ -136,13 +155,13 @@ export function PunchButton({ status, onPress, onHoldComplete }: PunchButtonProp
 
   return (
     <View style={styles.container}>
-      <Text style={styles.subText}>{pc.sub}</Text>
-
       <View style={styles.buttonWrapper}>
         {/* Ripples */}
-        {status === 'in' && (
+        {(status === 'in' || status === 'break') && (
           <>
-            <Animated.View style={[styles.ripple, rippleStyle]} />
+            <Animated.View style={[styles.ripple, rippleStyle1]} />
+            <Animated.View style={[styles.ripple, rippleStyle2]} />
+            <Animated.View style={[styles.ripple, rippleStyle3]} />
           </>
         )}
 
@@ -224,13 +243,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginVertical: 10,
-  },
-  subText: {
-    fontSize: 11,
-    color: Colors.muted,
-    fontFamily: 'PlusJakartaSans-Medium',
-    marginBottom: 8,
-    letterSpacing: 0.3,
   },
   buttonWrapper: {
     width: BUTTON_SIZE + 80,

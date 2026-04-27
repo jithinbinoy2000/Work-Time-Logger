@@ -1,16 +1,14 @@
-import React, { useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Dimensions, Platform } from 'react-native';
-import { BottomTabBarProps } from '@react-navigation/bottom-tabs';
-import { Home, Calendar, User, Settings } from 'lucide-react-native';
 import { Colors } from '@/constants/theme';
-import Animated, { 
-  useAnimatedStyle, 
-  withSpring, 
-  useSharedValue, 
+import { BottomTabBarProps } from '@react-navigation/bottom-tabs';
+import { Calendar, Home, Settings, User } from 'lucide-react-native';
+import React, { useEffect } from 'react';
+import { Dimensions, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import Animated, {
+  Easing,
   interpolate,
-  useDerivedValue,
-  withTiming,
-  Easing
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -18,12 +16,19 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 export function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
-  
+
+  const focusedOptions = descriptors[state.routes[state.index].key].options as any;
+  if (focusedOptions.tabBarStyle?.display === 'none') {
+    return null;
+  }
+
   return (
-    <View style={[styles.outerContainer, { paddingBottom: Math.max(insets.bottom, 20) }]}>
+    <View style={[styles.outerContainer, { paddingBottom: Math.max(10, insets.bottom) }]}>
       <View style={styles.tabBar}>
         {state.routes.map((route, index) => {
-          const { options } = descriptors[route.key];
+          const options = descriptors[route.key].options as any;
+          if (options.href === null) return null;
+
           const isFocused = state.index === index;
 
           const onPress = () => {
@@ -57,24 +62,23 @@ function TabItem({ isFocused, onPress, route }: { isFocused: boolean, onPress: (
   const animatedValue = useSharedValue(isFocused ? 1 : 0);
 
   useEffect(() => {
-    animatedValue.value = withSpring(isFocused ? 1 : 0, {
-      damping: 14,
-      stiffness: 120,
+    animatedValue.value = withTiming(isFocused ? 1 : 0, {
+      duration: 250,
+      easing: Easing.bezier(0.34, 1.56, 0.64, 1),
     });
   }, [isFocused]);
 
   const containerStyle = useAnimatedStyle(() => {
     return {
-      flex: interpolate(animatedValue.value, [0, 1], [1, 2.2]),
       backgroundColor: isFocused ? Colors.accent : 'transparent',
+      paddingHorizontal: interpolate(animatedValue.value, [0, 1], [8, 18]),
     };
   });
 
   const labelStyle = useAnimatedStyle(() => {
     return {
       opacity: interpolate(animatedValue.value, [0.5, 1], [0, 1]),
-      width: interpolate(animatedValue.value, [0, 1], [0, 65]),
-      transform: [{ scale: animatedValue.value }],
+      width: interpolate(animatedValue.value, [0, 1], [0, 50]),
     };
   });
 
@@ -107,7 +111,7 @@ function TabItem({ isFocused, onPress, route }: { isFocused: boolean, onPress: (
     <TouchableOpacity
       onPress={onPress}
       activeOpacity={0.8}
-      style={{ flex: isFocused ? 2.2 : 1 }}
+      style={{ flex: isFocused ? 2 : 1 }}
     >
       <Animated.View style={[styles.tabItem, containerStyle]}>
         <Icon />
@@ -124,11 +128,9 @@ function TabItem({ isFocused, onPress, route }: { isFocused: boolean, onPress: (
 const styles = StyleSheet.create({
   outerContainer: {
     paddingHorizontal: 20,
-    backgroundColor: 'transparent',
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
+    paddingTop: 10,
+    paddingBottom: 20,
+    backgroundColor: Colors.background,
     zIndex: 1000,
   },
   tabBar: {
@@ -137,20 +139,19 @@ const styles = StyleSheet.create({
     borderRadius: 50,
     padding: 6,
     alignItems: 'center',
-    gap: 4,
+    gap: 6,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.3,
-    shadowRadius: 25,
-    elevation: 15,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.15,
+    shadowRadius: 20,
+    elevation: 10,
   },
   tabItem: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 10,
+    paddingVertical: 11,
     borderRadius: 40,
-    height: 48,
   },
   labelContainer: {
     marginLeft: 8,
